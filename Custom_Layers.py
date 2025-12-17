@@ -3,6 +3,7 @@ from keras import backend as K
 from keras import layers, initializers
 from typing import Sequence
 
+
 @tf.keras.utils.register_keras_serializable()
 def variance_loss_function(Sigmas_true, weights_predicted, penalty=0.):
     """
@@ -20,14 +21,19 @@ def variance_loss_function(Sigmas_true, weights_predicted, penalty=0.):
     else:
         n = 1.0
 
-    portfolio_variance = n * tf.matmul(weights_predicted, tf.matmul(Sigmas_true, weights_predicted), transpose_a=True)
+    portfolio_variance = n * \
+        tf.matmul(weights_predicted, tf.matmul(
+            Sigmas_true, weights_predicted), transpose_a=True)
 
     if penalty > 0:
-        gross_leverage = tf.reduce_sum(tf.abs(weights_predicted), axis=-2, keepdims=True)
+        gross_leverage = tf.reduce_sum(
+            tf.abs(weights_predicted), axis=-2, keepdims=True)
         excess_leverage = gross_leverage - 1
-        portfolio_variance +=  penalty * tf.reduce_mean(tf.square(excess_leverage))
+        portfolio_variance += penalty * \
+            tf.reduce_mean(tf.square(excess_leverage))
 
-    return portfolio_variance
+    return portfolio_variance*1000
+
 
 @tf.keras.utils.register_keras_serializable()
 def buy_and_hold_volatility_loss_function(ret_out, weights_predicted):
@@ -43,10 +49,11 @@ def buy_and_hold_volatility_loss_function(ret_out, weights_predicted):
     """
 
     n_stocks = tf.shape(ret_out)[1]
-        
+
    # 2) Prezzi relativi cumprod(1+r), con valore iniziale 1
     cum_rel = tf.math.cumprod(1.0 + ret_out, axis=-1)
-    price_series = tf.concat([tf.ones_like(cum_rel[..., :1]), cum_rel], axis=-1)
+    price_series = tf.concat(
+        [tf.ones_like(cum_rel[..., :1]), cum_rel], axis=-1)
 
     # 3) Valore del portafoglio buy‑and‑hold
     port_val = tf.reduce_sum(price_series * weights_predicted, axis=1)
@@ -56,10 +63,11 @@ def buy_and_hold_volatility_loss_function(ret_out, weights_predicted):
     ret = tf.divide(port_val[:, 1:], port_val[:, :-1]) - 1
 
     # 5) σ campionaria e annualizzazione (assume dati giornalieri)
-    vol = tf.math.reduce_std(ret, axis=-1) * tf.sqrt(252.0 * tf.cast(n_stocks, dtype=tf.float32))
+    vol = tf.math.reduce_std(ret, axis=-1) * \
+        tf.sqrt(252.0 * tf.cast(n_stocks, dtype=tf.float32))
 
     # 6) Loss = media batch (scalar) → ottimo per .compile(loss=…)
-    return tf.reduce_mean(vol) 
+    return tf.reduce_mean(vol)
 
 
 @tf.keras.utils.register_keras_serializable()
@@ -72,10 +80,11 @@ def frobenius_loss_function(Sigmas_true, Sigmas_predicted):
     Outputs:
     - tf.Tensor, Frobenius norm of the difference between predicted and true covariance matrices, normalized by the system size.
     """
-    
+
     n = tf.cast(tf.shape(Sigmas_true)[-1], dtype=tf.float32)
 
     return tf.sqrt(tf.reduce_sum(tf.square(Sigmas_predicted - Sigmas_true), axis=[-2, -1])) / n
+
 
 @tf.keras.utils.register_keras_serializable(
     package='Custom_Layers',
@@ -110,17 +119,18 @@ class Return_Weightings(layers.Layer):
 
     def call(self, inputs):
         beta_sp = tf.nn.softplus(self.beta)
-        weighted_inputs = self.alpha / beta_sp * tf.math.tanh(beta_sp * (inputs - self.gamma))
+        weighted_inputs = self.alpha / beta_sp * \
+            tf.math.tanh(beta_sp * (inputs - self.gamma))
         return weighted_inputs, self.alpha, beta_sp, self.gamma
 
     def get_config(self):
         config = super(Return_Weightings, self).get_config()
         return config
-    
+
     @classmethod
     def from_config(cls, config):
         return cls(**config)
-import tensorflow as tf
+
 
 @tf.keras.utils.register_keras_serializable(
     package='Custom_Layers',
@@ -135,19 +145,20 @@ class StandardDeviationLayer(layers.Layer):
         self.demean = demean
 
     def call(self, x):
-        sample_size = tf.cast(tf.shape(x)[self.axis], tf.float32) 
-        
+        sample_size = tf.cast(tf.shape(x)[self.axis], tf.float32)
+
         if self.demean:
             mean = tf.reduce_mean(x, axis=self.axis, keepdims=True)
             x = x - mean
             sample_size -= 1
-            
-        variance = tf.reduce_sum(tf.square(x), axis=self.axis, keepdims=True) / sample_size
+
+        variance = tf.reduce_sum(
+            tf.square(x), axis=self.axis, keepdims=True) / sample_size
         std = tf.sqrt(variance)
-        
+
         if not self.demean:
             mean = tf.zeros_like(std)
-            
+
         return std, mean
 
     def get_config(self):
@@ -157,10 +168,11 @@ class StandardDeviationLayer(layers.Layer):
             'demean': self.demean
         })
         return config
-    
+
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
 
 @tf.keras.utils.register_keras_serializable(
     package='Custom_Layers',
@@ -176,8 +188,9 @@ class CovarianceLayer(layers.Layer):
 
     def call(self, Returns):
         if self.normalize:
-            sample_size = tf.cast(tf.shape(Returns)[-1], tf.float32) 
-            Covariance = tf.matmul(Returns, Returns, transpose_b=True) / sample_size
+            sample_size = tf.cast(tf.shape(Returns)[-1], tf.float32)
+            Covariance = tf.matmul(
+                Returns, Returns, transpose_b=True) / sample_size
         else:
             Covariance = tf.matmul(Returns, Returns, transpose_b=True)
         if self.expand_dims:
@@ -191,10 +204,11 @@ class CovarianceLayer(layers.Layer):
             'normalize': self.normalize
         })
         return config
-    
+
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
 
 @tf.keras.utils.register_keras_serializable(
     package='Custom_Layers',
@@ -217,6 +231,8 @@ class SpectralDecompositionLayer(layers.Layer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
+
 @tf.keras.utils.register_keras_serializable(
     package='Custom_Layers',
     name='DimensionAwareLayer'
@@ -243,12 +259,15 @@ class DimensionAwareLayer(layers.Layer):
             q = n_days / n_stocks
             tensors_to_concat.append(self._set_attribute(q, final_shape))
         if 'n_stocks' in self.features:
-            tensors_to_concat.append(self._set_attribute(tf.math.sqrt(n_stocks), final_shape))
+            tensors_to_concat.append(self._set_attribute(
+                tf.math.sqrt(n_stocks), final_shape))
         if 'n_days' in self.features:
-            tensors_to_concat.append(self._set_attribute(tf.math.sqrt(n_days), final_shape))
+            tensors_to_concat.append(self._set_attribute(
+                tf.math.sqrt(n_days), final_shape))
         if 'rsqrt_n_days' in self.features:
             rsqrt_n_days = tf.math.rsqrt(n_days)
-            tensors_to_concat.append(self._set_attribute(rsqrt_n_days, final_shape))
+            tensors_to_concat.append(
+                self._set_attribute(rsqrt_n_days, final_shape))
         transformed_eigen_values = tf.concat(tensors_to_concat, axis=-1)
         return transformed_eigen_values
 
@@ -263,10 +282,11 @@ class DimensionAwareLayer(layers.Layer):
             'features': self.features
         })
         return config
-    
+
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
 
 @tf.keras.utils.register_keras_serializable(
     package='Custom_Layers',
@@ -335,23 +355,24 @@ class DeepLayer(layers.Layer):
             'kernel_initializer': self.kernel_initializer
         })
         return config
-    
+
     @classmethod
     def from_config(cls, config):
         return cls(**config)
-    
+
     def compute_output_shape(self, input_shape):
         output_shape = list(input_shape)
         output_shape[-1] = self.hidden_layer_sizes[-1]
         return tuple(output_shape)
+
 
 @tf.keras.utils.register_keras_serializable(
     package='Custom_Layers',
     name='DeepRecurrentLayer'
 )
 class DeepRecurrentLayer(layers.Layer):
-    def __init__(self, recurrent_layer_sizes,final_activation="softplus", final_hidden_layer_sizes=[], final_hidden_activation="leaky_relu",
-                 direction='bidirectional', dropout=0.,recurrent_dropout=0.,recurrent_model='LSTM', normalize=None, name=None, **kwargs):
+    def __init__(self, recurrent_layer_sizes, final_activation="softplus", final_hidden_layer_sizes=[], final_hidden_activation="leaky_relu",
+                 direction='bidirectional', dropout=0., recurrent_dropout=0., recurrent_model='LSTM', normalize=None, name=None, **kwargs):
         if name is None:
             raise ValueError("DeepRecurrentLayer must have a name.")
         super(DeepRecurrentLayer, self).__init__(name=name, **kwargs)
@@ -385,14 +406,15 @@ class DeepRecurrentLayer(layers.Layer):
                 rnn_layer = RNN(units=units, dropout=self.dropout, recurrent_dropout=self.recurrent_dropout,
                                 return_sequences=True, go_backwards=True, name=layer_name)
             else:
-                raise ValueError("direction must be 'bidirectional', 'forward', or 'backward'.")
+                raise ValueError(
+                    "direction must be 'bidirectional', 'forward', or 'backward'.")
             self.recurrent_layers.append(rnn_layer)
 
-        self.final_deep_dense = DeepLayer(final_hidden_layer_sizes+[1], 
-                                     activation=final_hidden_activation,
-                                     last_activation=final_activation,
-                                     dropout_rate=dropout,
-                                     name=f"{self.name}_finaldeep")       
+        self.final_deep_dense = DeepLayer(final_hidden_layer_sizes+[1],
+                                          activation=final_hidden_activation,
+                                          last_activation=final_activation,
+                                          dropout_rate=dropout,
+                                          name=f"{self.name}_finaldeep")
 
     def build(self, input_shape):
         for layer in self.recurrent_layers:
@@ -407,9 +429,10 @@ class DeepRecurrentLayer(layers.Layer):
             x = layer(x)
         outputs = self.final_deep_dense(x)
         if self.normalize is not None:
-            outputs = CustomNormalizationLayer(self.normalize, axis=-2, name=f"{self.name}_norm")(outputs)
+            outputs = CustomNormalizationLayer(
+                self.normalize, axis=-2, name=f"{self.name}_norm")(outputs)
         return tf.squeeze(outputs, axis=-1)
-    
+
     def get_config(self):
         config = super().get_config()
         config.update({
@@ -425,10 +448,10 @@ class DeepRecurrentLayer(layers.Layer):
         })
         return config
 
-    
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
 
 @tf.keras.utils.register_keras_serializable(
     package='Custom_Layers',
@@ -474,12 +497,13 @@ class EigenProductLayer(layers.Layer):
     def __init__(self, scaling_factor='none', name=None, **kwargs):
         # prima chiamo il costruttore base, così la cov_layer verrà registrata
         super(EigenProductLayer, self).__init__(name=name, **kwargs)
-        
+
         if name is None:
             raise ValueError("EigenProductLayer must have a name.")
-        if scaling_factor not in ['inverse','direct','none']:
-            raise ValueError("scaling_factor must be 'inverse', 'direct', or 'none'")
-        
+        if scaling_factor not in ['inverse', 'direct', 'none']:
+            raise ValueError(
+                "scaling_factor must be 'inverse', 'direct', or 'none'")
+
         self.scaling_factor = scaling_factor
 
     def call(self, eigenvalues, eigenvectors):
@@ -506,7 +530,8 @@ class EigenProductLayer(layers.Layer):
         if self.scaling_factor == 'direct':
             # diag(P) = Σ_k λ_k · V_{ik}^2
             diag_P = tf.linalg.diag_part(P)                  # [..., n]
-            inv_sqrt = tf.math.rsqrt(diag_P)                 # [..., n] = 1/√diag
+            # [..., n] = 1/√diag
+            inv_sqrt = tf.math.rsqrt(diag_P)
             row = tf.expand_dims(inv_sqrt, axis=-1)          # [..., n, 1]
             col = tf.expand_dims(inv_sqrt, axis=-2)          # [..., 1, n]
             return P * row * col
@@ -518,7 +543,7 @@ class EigenProductLayer(layers.Layer):
             # diag_Sigma = tf.reduce_sum(eigenvectors**2 * eigenvalues[...,None,:], axis=-1)
             diag_Sigma = tf.reduce_sum(
                 tf.square(eigenvectors) * tf.expand_dims(eigenvalues, -2),
-                 axis=-1
+                axis=-1
             )                                           # [..., n]
             sqrt_d = tf.sqrt(diag_Sigma)                      # [..., n]
             row = tf.expand_dims(sqrt_d, axis=-1)             # [..., n, 1]
@@ -530,7 +555,7 @@ class EigenProductLayer(layers.Layer):
         cfg = super().get_config()
         cfg.update({'scaling_factor': self.scaling_factor})
         return cfg
-    
+
     @classmethod
     def from_config(cls, config):
         return cls(**config)
@@ -547,10 +572,11 @@ class NormalizedSum(layers.Layer):
         super(NormalizedSum, self).__init__(name=name, **kwargs)
         self.axis_1 = axis_1
         self.axis_2 = axis_2
+
     def call(self, x):
         w = tf.reduce_sum(x, axis=self.axis_1, keepdims=True)
         return w / tf.reduce_sum(w, axis=self.axis_2, keepdims=True)
-    
+
     def get_config(self):
         config = super(NormalizedSum, self).get_config()
         config.update({
@@ -558,11 +584,12 @@ class NormalizedSum(layers.Layer):
             'axis_2': self.axis_2
         })
         return config
-    
+
     @classmethod
     def from_config(cls, config):
         return cls(**config)
-    
+
+
 @tf.keras.utils.register_keras_serializable(
     package='Custom_Layers',
     name='MDRNN2D'
@@ -680,9 +707,9 @@ class MDRNN2D(tf.keras.layers.Layer):
             N = tf.shape(rows)[0]
 
             batch_ids = tf.repeat(tf.range(B), repeats=N)    # (B*N,)
-            rows_rep  = tf.tile(rows, [B])                   # (B*N,)
-            cols_rep  = tf.tile(cols, [B])                   # (B*N,)
-            idx_flat  = tf.stack([batch_ids, rows_rep, cols_rep], axis=1)
+            rows_rep = tf.tile(rows, [B])                   # (B*N,)
+            cols_rep = tf.tile(cols, [B])                   # (B*N,)
+            idx_flat = tf.stack([batch_ids, rows_rep, cols_rep], axis=1)
             x_flat = tf.gather_nd(x, idx_flat)               # (B*N, C)
 
             # Gather helpers
@@ -699,13 +726,13 @@ class MDRNN2D(tf.keras.layers.Layer):
                                     tf.zeros_like(gathered))
                 return gathered, tf.expand_dims(valid, -1)
 
-            h_up,   v_up   = _gather(h_grid, -1,  0)
+            h_up,   v_up = _gather(h_grid, -1,  0)
             h_left, v_left = _gather(h_grid,  0, -1)
-            h_ul,   v_ul   = _gather(h_grid, -1, -1)
+            h_ul,   v_ul = _gather(h_grid, -1, -1)
 
             h_sum = h_up + h_left + h_ul
             valid_cnt = (tf.cast(v_up, dtype) + tf.cast(v_left, dtype) +
-                          tf.cast(v_ul, dtype))
+                         tf.cast(v_ul, dtype))
             valid_cnt = tf.maximum(valid_cnt, 1.)
             h_prev = h_sum / valid_cnt
 
@@ -721,9 +748,9 @@ class MDRNN2D(tf.keras.layers.Layer):
             N = tf.shape(rows)[0]
 
             batch_ids = tf.repeat(tf.range(B), repeats=N)
-            rows_rep  = tf.tile(rows, [B])
-            cols_rep  = tf.tile(cols, [B])
-            idx_flat  = tf.stack([batch_ids, rows_rep, cols_rep], axis=1)
+            rows_rep = tf.tile(rows, [B])
+            cols_rep = tf.tile(cols, [B])
+            idx_flat = tf.stack([batch_ids, rows_rep, cols_rep], axis=1)
             x_flat = tf.gather_nd(x, idx_flat)
 
             def _gather(state, di, dj):
@@ -739,17 +766,17 @@ class MDRNN2D(tf.keras.layers.Layer):
                                     tf.zeros_like(gathered))
                 return gathered, tf.expand_dims(valid, -1)
 
-            h_up,   v_up   = _gather(h_grid, -1,  0)
+            h_up,   v_up = _gather(h_grid, -1,  0)
             h_left, v_left = _gather(h_grid,  0, -1)
-            h_ul,   v_ul   = _gather(h_grid, -1, -1)
-            c_up,   _      = _gather(c_grid, -1,  0)
-            c_left, _      = _gather(c_grid,  0, -1)
-            c_ul,   _      = _gather(c_grid, -1, -1)
+            h_ul,   v_ul = _gather(h_grid, -1, -1)
+            c_up,   _ = _gather(c_grid, -1,  0)
+            c_left, _ = _gather(c_grid,  0, -1)
+            c_ul,   _ = _gather(c_grid, -1, -1)
 
             h_sum = h_up + h_left + h_ul
             c_sum = c_up + c_left + c_ul
             valid_cnt = (tf.cast(v_up, dtype) + tf.cast(v_left, dtype) +
-                          tf.cast(v_ul, dtype))
+                         tf.cast(v_ul, dtype))
             valid_cnt = tf.maximum(valid_cnt, 1.)
             h_prev = h_sum / valid_cnt
             c_prev = c_sum / valid_cnt
@@ -789,14 +816,15 @@ class MDRNN2D(tf.keras.layers.Layer):
             flip_h, flip_w = self._direction_to_flip(dir_name)
             outputs.append(self._scan_single(inputs, cell, flip_h, flip_w))
         return outputs[0] if len(outputs) == 1 else tf.concat(outputs, axis=-1)
-    
+
+
 @tf.keras.utils.register_keras_serializable(
     package='Custom_Layers',
     name='LagTransformLayer'
 )
 class LagTransformLayer(layers.Layer):
     """Layer that applies a lag transformation to the input tensor.
-    
+
     This layer takes a 3D tensor of shape (batch_size, time_steps, features)
     and applies a lag transformation to it, creating a new tensor with the
     specified number of lags.
@@ -807,14 +835,13 @@ class LagTransformLayer(layers.Layer):
     name : str, optional
         Name of the layer.
     """
-    
+
     def __init__(self, warm_start=True, name=None, eps=None, **kwargs):
         if name is None:
             raise ValueError("LagTransformLayer must have a name.")
-     
-        
-        super().__init__(name=name,**kwargs)
-        self.eps        = K.epsilon()
+
+        super().__init__(name=name, **kwargs)
+        self.eps = K.epsilon()
         self.warm_start = warm_start
 
         # valori presi dalla figura
@@ -831,7 +858,8 @@ class LagTransformLayer(layers.Layer):
         if self.warm_start:
             init = initializers.Constant(mean_raw)
         else:                                      # ±5 % noise (in raw space)
-            init = initializers.RandomNormal(mean_raw, 0.05 * tf.math.abs(mean_raw))
+            init = initializers.RandomNormal(
+                mean_raw, 0.05 * tf.math.abs(mean_raw))
 
         return self.add_weight(
             shape=(), dtype="float32",
@@ -869,18 +897,18 @@ class LagTransformLayer(layers.Layer):
 
         # ---------- formule ----------
         alpha = c0 * tf.pow(t, -c1)                  # (T,)
-        beta  = c2 - c3 * tf.exp(-c4 * t)            # (T,)
+        beta = c2 - c3 * tf.exp(-c4 * t)            # (T,)
 
         # ---------- reshape & output -------------
-        ndims     = tf.rank(R)
-        pad_ones  = tf.ones(ndims - 1, dtype=tf.int32)
-        shape_T   = tf.concat([pad_ones, [T]], 0)
+        ndims = tf.rank(R)
+        pad_ones = tf.ones(ndims - 1, dtype=tf.int32)
+        shape_T = tf.concat([pad_ones, [T]], 0)
 
         alpha_div_beta = tf.reshape(alpha / (beta + self.eps), shape_T)
-        beta           = tf.reshape(beta, shape_T)
+        beta = tf.reshape(beta, shape_T)
 
         return alpha_div_beta * tf.tanh(beta * R)
-    
+
     def get_config(self):
         config = super().get_config()
         config.update({
@@ -888,10 +916,7 @@ class LagTransformLayer(layers.Layer):
             'warm_start': self.warm_start
         })
         return config
-    
+
     @classmethod
     def from_config(cls, config):
         return cls(**config)
-    
-    
-    
