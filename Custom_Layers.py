@@ -32,7 +32,7 @@ def variance_loss_function(Sigmas_true, weights_predicted, penalty=0.):
         portfolio_variance += penalty * \
             tf.reduce_mean(tf.square(excess_leverage))
 
-    return portfolio_variance*1000
+    return portfolio_variance*1000  # fois 1000 pour éviter problème affichage loss
 
 
 @tf.keras.utils.register_keras_serializable()
